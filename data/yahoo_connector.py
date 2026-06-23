@@ -1,35 +1,13 @@
 """
-data.yahoo_connector — Yahoo Finance market data connector.
+data.yahoo_connector — Backward-compatible re-export shim.
 
-Uses the `yfinance` library. No API key required for basic usage.
-Phase 2 implements the concrete body.
+Phase 1 shipped this filename with a stub class. Phase 3 moved the real
+implementation to `data.yahoo`. This module re-exports the real class
+so existing imports (`from data.yahoo_connector import YahooConnector`)
+continue to work without any changes.
 """
 from __future__ import annotations
 
-import pandas as pd
+from data.yahoo import YahooConnector
 
-from config import settings
-from data.base_connector import BaseConnector
-
-
-class YahooConnector(BaseConnector):
-    """Yahoo Finance market data connector (equities, ETFs, FX, crypto)."""
-
-    name = "yahoo"
-
-    def __init__(self) -> None:
-        self._user_agent = settings.yfinance_user_agent
-        self._client = None  # Initialized in Phase 2.
-
-    async def fetch_ohlcv(
-        self,
-        symbol: str,
-        interval: str,
-        limit: int = 500,
-        start: pd.Timestamp | None = None,
-        end: pd.Timestamp | None = None,
-    ) -> pd.DataFrame:
-        raise NotImplementedError("YahooConnector.fetch_ohlcv() lands in Phase 2.")
-
-    async def fetch_symbols(self) -> list[dict]:
-        raise NotImplementedError("YahooConnector.fetch_symbols() lands in Phase 2.")
+__all__ = ["YahooConnector"]

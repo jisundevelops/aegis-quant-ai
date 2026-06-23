@@ -19,10 +19,11 @@ pandas-ta==0.3.14b1
 ta==0.11.0
 
 # ---------- Data Connectors ----------
-python-binance==1.0.19
-yfinance==0.2.43
+python-binance>=1.0.19
+yfinance>=0.2.43
 MetaTrader5==5.0.45
 ccxt==4.3.86
+apscheduler>=3.10.4
 
 # ---------- Database ----------
 asyncpg>=0.30.0

@@ -36,8 +36,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.db_ready = False
         app.state.redis_ready = False
         app.state.db_error = str(exc)
+
+    # Phase 3: start the data collection scheduler (toggleable).
+    app.state.scheduler = None
+    if settings.scheduler_enabled:
+        try:
+            from data.scheduler import start_scheduler, stop_scheduler
+            app.state.scheduler = start_scheduler()
+        except Exception as exc:  # noqa: BLE001
+            app.state.scheduler_error = str(exc)
+
     yield
-    # Phase 2: release resources.
+
+    # Phase 3: shut down the scheduler first (closes connectors).
+    if app.state.scheduler is not None:
+        try:
+            from data.scheduler import stop_scheduler
+            await stop_scheduler()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Phase 2: release DB + Redis resources.
     try:
         await close_all()
     except Exception:  # noqa: BLE001

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     log_level: str = "INFO"
+    scheduler_enabled: bool = Field(default=True,
+        description="Whether to start the APScheduler data fetcher on app startup.")
 
     # ---------- Database URLs (Phase 2 — take priority when set) ----------
     database_url: str = Field(default="", repr=False,
