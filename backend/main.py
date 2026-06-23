@@ -1,0 +1,74 @@
+"""
+backend.main — FastAPI application entry point.
+
+Boots the API, configures logging, wires routers, and exposes the ASGI
+`app` object consumed by uvicorn.
+
+Run:
+    uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+"""
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI
+
+from backend.api.routes import health, market_data, signals
+from backend.core.exceptions import register_exception_handlers
+from backend.core.logging import configure_logging
+from config import settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application startup and shutdown lifecycle."""
+    configure_logging()
+    # Phase 2: warm the DB engine + Redis client (lazy singletons).
+    try:
+        from database.connection import close_all, get_async_engine, get_redis
+
+        get_async_engine()
+        get_redis()
+        app.state.db_ready = True
+        app.state.redis_ready = True
+    except Exception as exc:  # noqa: BLE001 — let app boot even if DB is down
+        app.state.db_ready = False
+        app.state.redis_ready = False
+        app.state.db_error = str(exc)
+    yield
+    # Phase 2: release resources.
+    try:
+        await close_all()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description="Modular, institutional-grade AI trading research assistant.",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+)
+
+# Register global exception handlers.
+register_exception_handlers(app)
+
+# Wire routers.
+app.include_router(health.router, prefix="/api", tags=["health"])
+app.include_router(market_data.router, prefix="/api/market-data", tags=["market-data"])
+app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
+
+
+@app.get("/", tags=["root"])
+async def root() -> dict[str, str]:
+    """Root metadata endpoint."""
+    return {
+        "app": settings.app_name,
+        "version": settings.app_version,
+        "env": settings.app_env,
+        "docs": "/docs",
+    }

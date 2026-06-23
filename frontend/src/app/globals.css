@@ -1,0 +1,30 @@
+:root {
+  --bg: #0b0e14;
+  --fg: #e6e9ef;
+  --accent: #00d4ff;
+  --muted: #8b95a7;
+  --border: #1f242e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, sans-serif;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
