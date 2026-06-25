@@ -14,7 +14,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from backend.api.routes import analyze, health, market_data, signals
+from backend.api.routes import analyze, backtest, health, market_data, signals
 from backend.core.exceptions import register_exception_handlers
 from backend.core.logging import configure_logging
 from config import settings
@@ -81,6 +81,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(market_data.router, prefix="/api/market-data", tags=["market-data"])
 app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
 app.include_router(analyze.router, prefix="/api", tags=["analyze"])
+app.include_router(backtest.router, prefix="/api", tags=["backtest"])
 
 
 @app.get("/", tags=["root"])
