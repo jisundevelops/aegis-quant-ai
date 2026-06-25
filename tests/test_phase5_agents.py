@@ -445,6 +445,24 @@ async def test_retail_trap_agent_handles_empty_df():
         assert v == 0.0
 
 
+@pytest.mark.asyncio
+async def test_retail_trap_agent_handles_no_sweeps():
+    """RetailTrapAgent must not crash when there are zero liquidity sweeps."""
+    from agents.retail_trap_agent import RetailTrapAgent
+    df = _feature_df(n=200)
+    # Ensure no sweeps, no equal highs/lows, no BOS
+    df["liquidity_sweep"] = pd.Series([np.nan] * len(df), index=df.index, dtype="object")
+    df["equal_highs"] = False
+    df["equal_lows"] = False
+    df["bos"] = pd.Series([np.nan] * len(df), index=df.index, dtype="object")
+    # Should NOT raise IndexError
+    sig = await RetailTrapAgent().analyze("BTCUSDT", features_df=df)
+    assert sig.agent == "retail_trap"
+    assert sig.bias in {"Bullish", "Bearish", "Neutral"}
+    for v in sig.trap_probabilities.values():
+        assert 0.0 <= v <= 1.0
+
+
 # --------------------------------------------------------------------
 # RiskAgent
 # --------------------------------------------------------------------

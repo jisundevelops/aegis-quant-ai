@@ -113,8 +113,13 @@ class RetailTrapAgent(BaseAgent):
         # If long squeeze > short squeeze, bias bearish
         score = 50.0
         score += (short_squeeze_prob - long_squeeze_prob) * 40
-        score += (sweep_count > 0) * 5 if sweeps.iloc[-1] == "bull" else 0
-        score -= (sweep_count > 0) * 5 if sweeps.iloc[-1] == "bear" else 0
+        # Only apply sweep bonus if there ARE sweeps (guard against empty series)
+        if sweep_count > 0 and not sweeps.empty:
+            last_sweep = sweeps.iloc[-1]
+            if last_sweep == "bull":
+                score += 5
+            elif last_sweep == "bear":
+                score -= 5
         score = float(np.clip(score, 0.0, 100.0))
 
         if score >= 65:
