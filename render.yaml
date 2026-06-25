@@ -1,0 +1,62 @@
+services:
+  # ─── Backend API (FastAPI) ───
+  - type: web
+    name: aegis-quant-api
+    runtime: python
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_NAME
+        value: Aegis Quant AI
+      - key: APP_VERSION
+        value: 0.1.0
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: APP_PORT
+        value: 8000
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: PYTHON_VERSION
+        value: 3.12.13
+      - key: DATABASE_URL
+        sync: false  # set manually in Render dashboard
+      - key: REDIS_URL
+        sync: false  # set manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false  # set manually in Render dashboard
+      - key: BINANCE_API_KEY
+        value: ""
+      - key: BINANCE_API_SECRET
+        value: ""
+      - key: BINANCE_TESTNET
+        value: "false"
+      - key: YFINANCE_USER_AGENT
+        value: AegisQuantAI/0.1
+      - key: MT5_LOGIN
+        value: ""
+      - key: MT5_PASSWORD
+        value: ""
+      - key: MT5_SERVER
+        value: ""
+      - key: MT5_PATH
+        value: ""
+      - key: OPENAI_API_KEY
+        value: ""
+      - key: ANTHROPIC_API_KEY
+        value: ""
+      - key: NEWS_API_KEY
+        value: ""
+      - key: ALPHAVANTAGE_API_KEY
+        value: ""
+      - key: API_KEY_HEADER
+        value: X-Aegis-Key
