@@ -6,14 +6,22 @@ Boots the API, configures logging, wires routers, and exposes the ASGI
 
 Run:
     uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+Render deployment note:
+    The lifespan function MUST complete quickly so uvicorn can bind to
+    $PORT before Render's port scanner times out (~60s). All slow
+    operations (DB warmup, scheduler start, initial data fetch) are
+    deferred to a background task that runs AFTER the app is listening.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
 from backend.api.routes import admin, analyze, backtest, health, market_data, signals
 from backend.core.exceptions import register_exception_handlers
@@ -21,47 +29,85 @@ from backend.core.logging import configure_logging
 from config import settings
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application startup and shutdown lifecycle."""
-    configure_logging()
-    # Phase 2: warm the DB engine + Redis client (lazy singletons).
-    try:
-        from database.connection import close_all, get_async_engine, get_redis
+async def _deferred_startup() -> None:
+    """Background task that runs AFTER the app is listening on $PORT.
 
+    This does the slow work:
+      1. Warm the DB engine + Redis client (lazy singletons)
+      2. Start the APScheduler (which triggers an immediate data fetch)
+
+    Any errors are logged but do NOT crash the app — the API stays up
+    even if the DB is unreachable (endpoints will return 503/404 with
+    helpful error messages via /api/admin/diagnose).
+    """
+    # Small delay to ensure uvicorn has fully bound the port
+    await asyncio.sleep(1.0)
+
+    # 1. Warm DB + Redis
+    try:
+        from database.connection import get_async_engine, get_redis
         get_async_engine()
         get_redis()
-        app.state.db_ready = True
-        app.state.redis_ready = True
-    except Exception as exc:  # noqa: BLE001 — let app boot even if DB is down
-        app.state.db_ready = False
-        app.state.redis_ready = False
-        app.state.db_error = str(exc)
+        logger.info("✅ DB engine + Redis client warmed up")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("❌ DB/Redis warmup failed: {} — call /api/admin/diagnose", exc)
 
-    # Phase 3: start the data collection scheduler (toggleable).
-    app.state.scheduler = None
+    # 2. Start scheduler (triggers immediate data fetch)
     if settings.scheduler_enabled:
         try:
-            from data.scheduler import start_scheduler, stop_scheduler
-            app.state.scheduler = start_scheduler()
+            from data.scheduler import start_scheduler
+            start_scheduler()
+            logger.info("✅ Scheduler started — initial data fetch in progress")
         except Exception as exc:  # noqa: BLE001
-            app.state.scheduler_error = str(exc)
+            logger.error("❌ Scheduler start failed: {}", exc)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application startup and shutdown lifecycle.
+
+    CRITICAL: This function MUST complete quickly (under 5 seconds) so
+    uvicorn can bind to $PORT before Render's port scanner times out.
+
+    All slow operations (DB warmup, scheduler start) are deferred to
+    a background task via asyncio.create_task().
+    """
+    configure_logging()
+    logger.info("Starting Aegis Quant AI v{}...", settings.app_version)
+
+    # Mark DB/Redis as not-yet-ready (will be set by _deferred_startup)
+    app.state.db_ready = False
+    app.state.redis_ready = False
+    app.state.scheduler = None
+
+    # Launch deferred startup in the background — does NOT block the
+    # lifespan from completing, so uvicorn binds to $PORT immediately.
+    startup_task = asyncio.create_task(_deferred_startup())
 
     yield
 
-    # Phase 3: shut down the scheduler first (closes connectors).
-    if app.state.scheduler is not None:
-        try:
-            from data.scheduler import stop_scheduler
-            await stop_scheduler()
-        except Exception:  # noqa: BLE001
-            pass
-
-    # Phase 2: release DB + Redis resources.
+    # ── Shutdown ────────────────────────────────────────────────────
+    # Cancel the deferred startup if it's still running
+    startup_task.cancel()
     try:
+        await startup_task
+    except asyncio.CancelledError:
+        pass
+
+    # Shut down the scheduler (closes connectors)
+    try:
+        from data.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Release DB + Redis resources
+    try:
+        from database.connection import close_all
         await close_all()
     except Exception:  # noqa: BLE001
         pass
+    logger.info("Aegis Quant AI shut down.")
 
 
 app = FastAPI(
@@ -75,8 +121,6 @@ app = FastAPI(
 )
 
 # CORS middleware — allows the Vercel frontend to call the API directly
-# if needed (the Next.js rewrite proxy is the primary path, but this is
-# a safety net for direct API access from browsers, mobile apps, etc.)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, restrict to your Vercel domain

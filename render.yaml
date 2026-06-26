@@ -8,7 +8,10 @@ services:
     branch: main
     rootDir: .
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    # CRITICAL: Use --timeout-keep-alive to prevent Render port binding
+    # timeout. The app binds to $PORT immediately (deferred startup),
+    # so this should complete in under 5 seconds.
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 30
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -29,11 +32,11 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.13
       - key: DATABASE_URL
-        sync: false  # set manually in Render dashboard
+        sync: false
       - key: REDIS_URL
-        sync: false  # set manually in Render dashboard
+        sync: false
       - key: JWT_SECRET
-        sync: false  # set manually in Render dashboard
+        sync: false
       - key: BINANCE_API_KEY
         value: ""
       - key: BINANCE_API_SECRET
