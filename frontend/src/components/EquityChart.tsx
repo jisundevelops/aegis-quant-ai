@@ -5,7 +5,6 @@ import {
   createChart,
   ColorType,
   IChartApi,
-  AreaSeries,
   UTCTimestamp,
 } from "lightweight-charts";
 
@@ -53,7 +52,9 @@ export default function EquityChart({ data, height = 400 }: EquityChartProps) {
     });
     chartRef.current = chart;
 
-    const series = chart.addSeries(AreaSeries, {
+    // v4 API: chart.addAreaSeries(options) — NOT chart.addSeries(AreaSeries, options)
+    // (AreaSeries export was introduced in v5; we're pinned to v4.2.0)
+    const series = chart.addAreaSeries({
       lineColor: "#00d4ff",
       topColor: "rgba(0, 212, 255, 0.4)",
       bottomColor: "rgba(0, 212, 255, 0.0)",
