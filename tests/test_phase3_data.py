@@ -161,7 +161,7 @@ def test_binance_static_config():
 
 def test_yahoo_static_config():
     from data.yahoo import YahooConnector
-    for s in ("EURUSD=X", "XAUUSD=X", "DX-Y.NYB", "^TNX"):
+    for s in ("EURUSD=X", "GC=F", "DX-Y.NYB", "^TNX"):
         assert s in YahooConnector.symbols
     # Yahoo uses "60m" internally but maps to "1h" in DB
     assert "60m" in YahooConnector.intervals

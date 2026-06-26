@@ -34,7 +34,10 @@ from data.base_connector import BaseConnector
 # --------------------------------------------------------------------
 # Static configuration (Phase 3 spec)
 # --------------------------------------------------------------------
-SYMBOLS: tuple[str, ...] = ("EURUSD=X", "XAUUSD=X", "DX-Y.NYB", "^TNX")
+# NOTE: XAUUSD=X was delisted from Yahoo Finance in 2024.
+# GC=F (Gold Futures) is the closest valid replacement — it tracks
+# the spot gold price and has full intraday history on Yahoo.
+SYMBOLS: tuple[str, ...] = ("EURUSD=X", "GC=F", "DX-Y.NYB", "^TNX")
 INTERVALS: tuple[str, str, str, str] = ("15m", "60m", "4h", "1d")
 
 # Yahoo interval -> our market_data.timeframe canonical string
@@ -131,7 +134,9 @@ class YahooConnector(BaseConnector):
             "auto_adjust": False,
             "repair": True,
             "actions": False,
-            "threads": False,
+            # NOTE: 'threads' param was removed in yfinance >= 0.2.40.
+            # Do NOT pass it — it causes:
+            #   PriceHistory.history() got an unexpected keyword argument 'threads'
         }
 
         if start is not None and end is not None:
@@ -278,7 +283,7 @@ def _classify(symbol: str) -> str:
     """Best-effort asset-class tag for the configured Yahoo symbols."""
     if symbol.endswith("=X") and "XAU" not in symbol:
         return "fx"
-    if "XAU" in symbol:
+    if symbol in ("XAUUSD=X", "GC=F", "GLD"):  # Gold (spot or futures or ETF)
         return "commodity"
     if symbol.startswith("^"):
         return "rate"

@@ -34,7 +34,8 @@ async def _deferred_startup() -> None:
 
     This does the slow work:
       1. Warm the DB engine + Redis client (lazy singletons)
-      2. Start the APScheduler (which triggers an immediate data fetch)
+      2. Actually TEST the DB connection with SELECT 1
+      3. Start the APScheduler (which triggers an immediate data fetch)
 
     Any errors are logged but do NOT crash the app — the API stays up
     even if the DB is unreachable (endpoints will return 503/404 with
@@ -43,16 +44,39 @@ async def _deferred_startup() -> None:
     # Small delay to ensure uvicorn has fully bound the port
     await asyncio.sleep(1.0)
 
-    # 1. Warm DB + Redis
+    # 1. Warm DB + Redis (creates engine/client — does NOT test connection)
     try:
         from database.connection import get_async_engine, get_redis
         get_async_engine()
         get_redis()
-        logger.info("✅ DB engine + Redis client warmed up")
+        logger.info("✅ DB engine + Redis client created (connection not yet tested)")
     except Exception as exc:  # noqa: BLE001
-        logger.error("❌ DB/Redis warmup failed: {} — call /api/admin/diagnose", exc)
+        logger.error("❌ DB/Redis engine creation failed: {} — call /api/admin/diagnose", exc)
+        return  # No point continuing if engine creation fails
 
-    # 2. Start scheduler (triggers immediate data fetch)
+    # 2. Actually TEST the DB connection with SELECT 1
+    #    (engine creation is lazy — this is the first real network call)
+    try:
+        from sqlalchemy import text as sql_text
+        from database.connection import async_session_ctx
+        async with async_session_ctx() as session:
+            await session.execute(sql_text("SELECT 1"))
+        logger.info("✅ Database connection verified (SELECT 1 succeeded)")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "❌ Database connection FAILED: {}\n"
+            "  → The DB engine was created but cannot connect.\n"
+            "  → Check GET /api/admin/diagnose for details.\n"
+            "  → Common causes:\n"
+            "    1. DATABASE_URL not set on Render (check Environment tab)\n"
+            "    2. DATABASE_URL points to localhost (must be Supabase URL)\n"
+            "    3. Supabase project is paused (free tier auto-pauses)\n"
+            "    4. Password not URL-encoded (@ must be %40)",
+            exc
+        )
+        return  # Don't start scheduler if DB is broken — it will just fail
+
+    # 3. Start scheduler (triggers immediate data fetch)
     if settings.scheduler_enabled:
         try:
             from data.scheduler import start_scheduler
@@ -87,7 +111,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     # ── Shutdown ────────────────────────────────────────────────────
-    # Cancel the deferred startup if it's still running
     startup_task.cancel()
     try:
         await startup_task
