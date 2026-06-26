@@ -45,7 +45,14 @@ _redis: Redis | None = None
 # PostgreSQL
 # --------------------------------------------------------------------
 def get_async_engine() -> AsyncEngine:
-    """Return the singleton async engine, creating it on first call."""
+    """Return the singleton async engine, creating it on first call.
+
+    Engine configuration:
+      - pool_pre_ping=True: tests each connection before use (catches drops)
+      - pool_size=10, max_overflow=20 (from settings)
+      - pool_recycle=1800: recycle connections after 30 minutes (prevents
+        stale connections from Supabase/Render network changes)
+    """
     global _engine
     if _engine is None:
         dsn = settings.postgres_dsn
@@ -54,12 +61,20 @@ def get_async_engine() -> AsyncEngine:
                 "No DATABASE_URL or POSTGRES_* fields configured. "
                 "Set DATABASE_URL in .env."
             )
+        if dsn.startswith("file:"):
+            raise ConfigurationError(
+                f"DATABASE_URL points to a local file ({dsn}). "
+                "It must be a PostgreSQL URL (postgresql+asyncpg://...). "
+                "Set DATABASE_URL in your Render dashboard to your Supabase URL."
+            )
         _engine = create_async_engine(
             dsn,
             echo=False,
-            pool_pre_ping=True,
+            pool_pre_ping=True,       # Test each connection before use
             pool_size=settings.postgres_pool_size,
             max_overflow=settings.postgres_max_overflow,
+            pool_recycle=1800,        # Recycle connections every 30 minutes
+            pool_timeout=10,          # Wait up to 10s for a connection
         )
     return _engine
 

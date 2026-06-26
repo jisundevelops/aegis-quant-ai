@@ -140,8 +140,15 @@ class FeatureCombiner:
                 )
                 rows = (await session.execute(stmt)).all()
         except Exception as exc:  # noqa: BLE001
-            logger.error("PostgreSQL load failed for {}:{}: {}",
-                         symbol, timeframe, exc)
+            logger.error(
+                "PostgreSQL load failed for {}:{}: {}\n"
+                "  → Check GET /api/admin/diagnose for full diagnostic.\n"
+                "  → Common fixes:\n"
+                "    1. Verify DATABASE_URL is set on Render (postgresql+asyncpg://...)\n"
+                "    2. Verify Supabase project is not paused (free tier auto-pauses)\n"
+                "    3. Call POST /api/admin/fetch-data to populate market_data",
+                symbol, timeframe, exc
+            )
             return pd.DataFrame()
 
         if not rows:
