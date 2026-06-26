@@ -92,7 +92,12 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 def start_scheduler() -> AsyncIOScheduler | None:
-    """Configure and start the scheduler if `settings.scheduler_enabled` is True."""
+    """Configure and start the scheduler if `settings.scheduler_enabled` is True.
+
+    Also schedules an immediate data fetch on startup so the market_data
+    table is populated without waiting for the first cron tick (which
+    could be up to 15 minutes away).
+    """
     if not settings.scheduler_enabled:
         logger.info("Scheduler disabled (SCHEDULER_ENABLED=false); skipping start.")
         return None
@@ -117,11 +122,87 @@ def start_scheduler() -> AsyncIOScheduler | None:
         replace_existing=True,
     )
 
+    # ── Immediate fetch on startup ────────────────────────────────────
+    # Schedule a one-shot job that runs ASAP (next_run_time=now). This
+    # populates market_data without waiting for the first cron tick.
+    # Critical for fresh deploys where the table is empty.
+    from datetime import datetime, timezone
+    sched.add_job(
+        _binance_job,
+        trigger="date",  # one-shot, runs immediately
+        id="binance_fetch_startup",
+        name="Binance OHLCV initial fetch on startup",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    sched.add_job(
+        _yahoo_job,
+        trigger="date",
+        id="yahoo_fetch_startup",
+        name="Yahoo OHLCV initial fetch on startup",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
     if not sched.running:
         sched.start()
         logger.info("Scheduler started — jobs: {}", [j.id for j in sched.get_jobs()])
+        logger.info("Initial data fetch triggered — market_data will be populated within ~30s")
 
     return sched
+
+
+async def fetch_now(binance: bool = True, yahoo: bool = True) -> dict[str, int]:
+    """Manually trigger an immediate data fetch (used by /api/admin/fetch-data).
+
+    Returns a dict mapping "{symbol}:{timeframe}" -> rows stored.
+    """
+    results: dict[str, int] = {}
+    if binance:
+        logger.info("[manual] Triggering immediate Binance fetch...")
+        try:
+            binance_results = await _binance_job_with_results()
+            results.update(binance_results)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[manual] Binance fetch failed: {}", exc)
+    if yahoo:
+        logger.info("[manual] Triggering immediate Yahoo fetch...")
+        try:
+            yahoo_results = await _yahoo_job_with_results()
+            results.update(yahoo_results)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[manual] Yahoo fetch failed: {}", exc)
+    return results
+
+
+async def _binance_job_with_results() -> dict[str, int]:
+    """Run the Binance fetch and return the per-symbol results dict."""
+    global _binance_connector
+    if _binance_connector is None:
+        from data.binance import BinanceConnector
+        _binance_connector = BinanceConnector()
+    try:
+        results = await _binance_connector.fetch_and_store_all(limit=500)
+        logger.info("[manual] Binance fetch done: {} rows across {} pairs",
+                    sum(results.values()), len(results))
+        return results
+    finally:
+        await _binance_connector.close()
+
+
+async def _yahoo_job_with_results() -> dict[str, int]:
+    """Run the Yahoo fetch and return the per-symbol results dict."""
+    global _yahoo_connector
+    if _yahoo_connector is None:
+        from data.yahoo import YahooConnector
+        _yahoo_connector = YahooConnector()
+    try:
+        results = await _yahoo_connector.fetch_and_store_all(limit=500)
+        logger.info("[manual] Yahoo fetch done: {} rows across {} pairs",
+                    sum(results.values()), len(results))
+        return results
+    finally:
+        await _yahoo_connector.close()
 
 
 async def stop_scheduler() -> None:
@@ -139,4 +220,4 @@ async def stop_scheduler() -> None:
     _scheduler = None
 
 
-__all__ = ["start_scheduler", "stop_scheduler", "get_scheduler"]
+__all__ = ["start_scheduler", "stop_scheduler", "get_scheduler", "fetch_now"]
