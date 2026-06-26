@@ -6,6 +6,7 @@ import {
   ColorType,
   IChartApi,
   AreaSeries,
+  UTCTimestamp,
 } from "lightweight-charts";
 
 export interface EquityPoint {
@@ -62,11 +63,11 @@ export default function EquityChart({ data, height = 400 }: EquityChartProps) {
     });
 
     // Convert data: lightweight-charts expects {time, value}
-    // Time must be a UNIX timestamp (seconds) or a business-day string
+    // Time must be a UNIX timestamp (seconds) for intraday data
     const seriesData = data.map((point) => {
       const ts = new Date(point.timestamp);
       return {
-        time: Math.floor(ts.getTime() / 1000) as never,
+        time: Math.floor(ts.getTime() / 1000) as UTCTimestamp,
         value: point.equity,
       };
     });

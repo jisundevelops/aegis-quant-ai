@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.routes import analyze, backtest, health, market_data, signals
 from backend.core.exceptions import register_exception_handlers
@@ -71,6 +72,17 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     lifespan=lifespan,
+)
+
+# CORS middleware — allows the Vercel frontend to call the API directly
+# if needed (the Next.js rewrite proxy is the primary path, but this is
+# a safety net for direct API access from browsers, mobile apps, etc.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict to your Vercel domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Register global exception handlers.

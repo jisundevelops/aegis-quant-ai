@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Chart.tsx — Backward-compatible re-export shim.
  *
