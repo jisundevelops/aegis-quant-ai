@@ -356,7 +356,12 @@ async def test_backtest_endpoint_returns_full_response():
     async def fake_build(self, symbol, timeframe, limit=500, use_cache=True):
         return df.copy()
 
-    with patch("features.combiner.FeatureCombiner.build", new=fake_build):
+    # Mock BOTH the DB path AND the Binance fallback (to avoid rate limits)
+    async def fake_binance_build(req):
+        return df.copy()
+
+    with patch("features.combiner.FeatureCombiner.build", new=fake_build), \
+         patch("backend.api.routes.backtest._build_features_from_binance", new=fake_binance_build):
         with TestClient(app) as client:
             r = client.post("/api/backtest", json={
                 "symbol": "BTCUSDT", "timeframe": "1h",
@@ -376,7 +381,8 @@ async def test_backtest_endpoint_returns_full_response():
 
 
 @pytest.mark.asyncio
-async def test_backtest_endpoint_404_when_no_data():
+async def test_backtest_endpoint_502_when_all_sources_fail():
+    """When both DB and Binance fallback fail, should return 502."""
     import os
     os.environ.pop("DATABASE_URL", None)
     os.environ.pop("REDIS_URL", None)
@@ -387,16 +393,22 @@ async def test_backtest_endpoint_404_when_no_data():
     from fastapi.testclient import TestClient
     from backend.main import app
 
+    # Mock DB to return empty
     async def fake_build(self, symbol, timeframe, limit=500, use_cache=True):
         return pd.DataFrame()
 
-    with patch("features.combiner.FeatureCombiner.build", new=fake_build):
+    # Mock Binance fallback to also fail
+    async def fake_binance_fail(req):
+        raise Exception("Binance unavailable")
+
+    with patch("features.combiner.FeatureCombiner.build", new=fake_build), \
+         patch("backend.api.routes.backtest._build_features_from_binance", new=fake_binance_fail):
         with TestClient(app) as client:
             r = client.post("/api/backtest", json={
                 "symbol": "NONEXIST", "timeframe": "1h",
                 "start": "2024-01-01", "end": "2024-12-31",
             })
-    assert r.status_code == 404
+    assert r.status_code == 502
 
 
 @pytest.mark.asyncio

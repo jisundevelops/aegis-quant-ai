@@ -13,8 +13,8 @@ class BacktestRequest(BaseModel):
                         description="ISO date string (inclusive)")
     end: str = Field(..., examples=["2024-12-31"],
                       description="ISO date string (inclusive)")
-    limit: int = Field(2000, ge=100, le=10000,
-                        description="Max bars to pull from the DB")
+    limit: int = Field(500, ge=100, le=1000,
+                        description="Max bars to pull from the DB (Binance max is 1000)")
     initial_capital: float = Field(10_000.0, gt=0)
     commission_bps: float = Field(1.0, ge=0)
     slippage_bps: float = Field(1.0, ge=0)
