@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -150,6 +150,35 @@ class Settings(BaseSettings):
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    @model_validator(mode="after")
+    def _validate_production_config(self) -> "Settings":
+        """In production, DATABASE_URL and REDIS_URL MUST be set.
+
+        Without this check, the code silently falls back to localhost
+        when DATABASE_URL is missing — which causes [Errno 101] Network
+        is unreachable on Render (no PostgreSQL on localhost).
+        """
+        import os
+        # Only enforce in production AND when not loading from .env
+        # (development can use individual POSTGRES_* fields)
+        if self.app_env == "production":
+            if not self.database_url:
+                # Check if individual fields are set (non-default)
+                using_individual = (
+                    self.postgres_host != "localhost"
+                    or self.postgres_password != ""
+                )
+                if not using_individual:
+                    raise ValueError(
+                        "DATABASE_URL is not set in production! "
+                        "The code would fall back to localhost (which doesn't "
+                        "exist on Render). Set DATABASE_URL in your Render "
+                        "dashboard to your Supabase URL: "
+                        "postgresql+asyncpg://postgres:PASSWORD@HOST:5432/DBNAME "
+                        "(remember to URL-encode @ as %40 in the password)"
+                    )
+        return self
 
 
 @lru_cache(maxsize=1)

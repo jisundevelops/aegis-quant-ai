@@ -1,16 +1,16 @@
 # ============================================================
 # Aegis Quant AI — Python Dependencies
-# Python 3.13
+# Python 3.12+ (tested on 3.12.13 and 3.13)
 # Install:  pip install -r requirements.txt
 # ============================================================
 
 # ---------- Web Framework ----------
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-pydantic==2.9.2
-pydantic-settings==2.5.2
-python-multipart==0.0.12
-orjson==3.10.7
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+pydantic>=2.9.2
+pydantic-settings>=2.5.2
+python-multipart>=0.0.12
+orjson>=3.10.7
 
 # ---------- Data Layer ----------
 pandas>=2.2.3
@@ -21,7 +21,6 @@ ta>=0.11.0
 # ---------- Data Connectors ----------
 python-binance>=1.0.19
 yfinance>=0.2.43
-ccxt==4.3.86
 apscheduler>=3.10.4
 
 # ---------- Database ----------
@@ -31,33 +30,35 @@ alembic>=1.13.2
 psycopg2-binary>=2.9.9
 redis>=5.0.8
 
-# ---------- Machine Learning ----------
-lightgbm==4.5.0
-xgboost==2.1.1
-torch==2.4.1
-scikit-learn==1.5.2
-statsmodels==0.14.2
-scipy==1.13.1
-
-# ---------- Backtesting ----------
-backtesting==0.3.3
-vectorbt==0.26.0
-
 # ---------- Utilities ----------
-python-dotenv==1.0.1
-loguru==0.7.2
-tenacity==9.0.0
+python-dotenv>=1.0.1
+loguru>=0.7.2
+tenacity>=9.0.0
 httpx>=0.27.2
-python-jose[cryptography]==3.3.0
-rich==13.8.1
-tqdm>=4.67.1
-PyYAML==6.0.2
-
-# ---------- LLM Providers (optional) ----------
-openai==1.51.0
-anthropic==0.34.2
+python-jose[cryptography]>=3.3.0
+rich>=13.8.1
+tqdm>=4.66.5
+PyYAML>=6.0.2
 
 # ---------- Testing ----------
-pytest==8.3.3
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
+pytest>=8.3.3
+pytest-asyncio>=0.24.0
+pytest-cov>=5.0.0
+
+# ============================================================
+# NOTE: The following dependencies are NOT included because they are
+# not used in the current codebase and would make the Render build
+# extremely slow or fail (torch alone is ~2GB):
+#   - torch (not used — no PyTorch models in current code)
+#   - lightgbm (not used — no LightGBM models)
+#   - xgboost (not used — no XGBoost models)
+#   - scikit-learn (not used — no sklearn models)
+#   - vectorbt (not used — custom backtest engine instead)
+#   - backtesting (not used — custom backtest engine instead)
+#   - ccxt (not used — using python-binance directly)
+#   - statsmodels (not used)
+#   - MetaTrader5 (Windows-only, not used on Render)
+#   - openai (not used — sentiment agent is placeholder)
+#   - anthropic (not used)
+# When you add ML models in future phases, add these back selectively.
+# ============================================================

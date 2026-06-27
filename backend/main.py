@@ -76,7 +76,22 @@ async def _deferred_startup() -> None:
         )
         return  # Don't start scheduler if DB is broken — it will just fail
 
-    # 3. Start scheduler (triggers immediate data fetch)
+    # 3. Auto-create tables if they don't exist (idempotent)
+    #    This replaces the need to manually run Alembic migrations on
+    #    a fresh Supabase database. Safe to run every startup — CREATE
+    #    IF NOT EXISTS is a no-op if tables already exist.
+    try:
+        from database.connection import get_async_engine
+        from database.models import Base
+        engine = get_async_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database tables verified/created (5 tables)")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("❌ Table creation failed: {} — tables may not exist", exc)
+        return
+
+    # 4. Start scheduler (triggers immediate data fetch)
     if settings.scheduler_enabled:
         try:
             from data.scheduler import start_scheduler
