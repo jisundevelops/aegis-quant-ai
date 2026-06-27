@@ -63,17 +63,51 @@ async def _deferred_startup() -> None:
             await session.execute(sql_text("SELECT 1"))
         logger.info("✅ Database connection verified (SELECT 1 succeeded)")
     except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "❌ Database connection FAILED: {}\n"
-            "  → The DB engine was created but cannot connect.\n"
-            "  → Check GET /api/admin/diagnose for details.\n"
-            "  → Common causes:\n"
-            "    1. DATABASE_URL not set on Render (check Environment tab)\n"
-            "    2. DATABASE_URL points to localhost (must be Supabase URL)\n"
-            "    3. Supabase project is paused (free tier auto-pauses)\n"
-            "    4. Password not URL-encoded (@ must be %40)",
-            exc
-        )
+        exc_str = str(exc).lower()
+        if "network is unreachable" in exc_str or "errno 101" in exc_str:
+            logger.error(
+                "❌ Database UNREACHABLE: {}\n"
+                "  → The Supabase database hostname cannot be reached.\n"
+                "  → This almost always means the Supabase project is PAUSED\n"
+                "    (free tier auto-pauses after 7 days of inactivity).\n"
+                "\n"
+                "  FIX (2 minutes):\n"
+                "    1. Go to https://supabase.com/dashboard\n"
+                "    2. Find your project (xozctzextzecvsysxtmv)\n"
+                "    3. If it says 'Paused', click 'Restore project'\n"
+                "    4. Wait 2-3 minutes for it to come back online\n"
+                "    5. Redeploy on Render (or restart the service)\n"
+                "\n"
+                "  ALTERNATIVE: Use the Supabase connection POOLER URL instead\n"
+                "    of the direct connection. Get it from:\n"
+                "    Supabase Dashboard → Project Settings → Database →\n"
+                "    Connection String → Transaction Mode\n"
+                "    Format: postgresql+asyncpg://postgres.xozctzextzecvsysxtmv:"
+                "PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres",
+                exc
+            )
+        elif "tenant" in exc_str or "enotfound" in exc_str:
+            logger.error(
+                "❌ Database tenant not found: {}\n"
+                "  → The Supabase project ID in DATABASE_URL is wrong.\n"
+                "  → Check that the project ID (xozctzextzecvsysxtmv) matches\n"
+                "    your actual Supabase project.\n"
+                "  → Get the correct connection string from:\n"
+                "    Supabase Dashboard → Project Settings → Database →\n"
+                "    Connection String",
+                exc
+            )
+        else:
+            logger.error(
+                "❌ Database connection FAILED: {}\n"
+                "  → Check GET /api/admin/diagnose for details.\n"
+                "  → Common causes:\n"
+                "    1. DATABASE_URL not set on Render (check Environment tab)\n"
+                "    2. DATABASE_URL points to localhost (must be Supabase URL)\n"
+                "    3. Supabase project is paused (free tier auto-pauses)\n"
+                "    4. Password not URL-encoded (@ must be %40)",
+                exc
+            )
         return  # Don't start scheduler if DB is broken — it will just fail
 
     # 3. Auto-create tables if they don't exist (idempotent)
