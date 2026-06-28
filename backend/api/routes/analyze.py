@@ -38,38 +38,26 @@ async def _build_features_from_db(req: AnalyzeRequest) -> pd.DataFrame:
 
 
 async def _build_features_from_binance(req: AnalyzeRequest) -> pd.DataFrame:
-    """Fallback: fetch data directly from Binance + build features in-memory.
+    """Fallback: fetch data directly from Binance/Yahoo + build features.
 
-    Used when the database is empty or unreachable. This ensures /api/analyze
-    ALWAYS works, even on a fresh deploy.
+    Uses the multi-source crypto fetcher that tries Binance first, then
+    falls back to Yahoo Finance if Binance is geo-blocked (common on
+    US-based servers like Render).
     """
-    from data.binance import BinanceConnector
-    from features.technical import TechnicalFeatures
-    from features.smc import SmartMoneyFeatures
-    import numpy as np
+    from data.crypto_fetcher import build_features_from_crypto
 
-    logger.info("FALLBACK: Fetching {} {} directly from Binance...", req.symbol, req.timeframe)
-    bc = BinanceConnector()
-    try:
-        df = await bc.fetch_ohlcv(req.symbol, req.timeframe, limit=req.limit)
-    finally:
-        await bc.close()
+    logger.info("FALLBACK: Fetching {} {} from crypto fetcher (Binance→Yahoo)...",
+                req.symbol, req.timeframe)
+    df = await build_features_from_crypto(
+        symbol=req.symbol,
+        timeframe=req.timeframe,
+        limit=min(req.limit, 1000),
+    )
 
     if df.empty:
-        raise ValueError(f"Binance returned no data for {req.symbol} {req.timeframe}")
+        raise ValueError(f"No data for {req.symbol} {req.timeframe}")
 
-    # Build technical + SMC features
-    df = TechnicalFeatures().compute(df)
-    df = SmartMoneyFeatures().compute(df)
-
-    # Add mock derivatives columns (real ones need Binance Futures API)
-    df["open_interest"] = 1_000_000_000.0
-    df["funding_rate"] = 0.0001
-    df["long_short_ratio"] = 1.2
-    df["cvd"] = np.cumsum(np.random.randn(len(df)) * 100)
-    df["liq_zone_bias"] = None
-
-    logger.info("FALLBACK: Built {} feature rows from Binance", len(df))
+    logger.info("FALLBACK: Built {} feature rows", len(df))
     return df
 
 

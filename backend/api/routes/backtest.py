@@ -29,34 +29,21 @@ async def _build_features_from_db(req: BacktestRequest) -> pd.DataFrame:
 
 
 async def _build_features_from_binance(req: BacktestRequest) -> pd.DataFrame:
-    """Fallback: fetch data directly from Binance + build features in-memory."""
-    from data.binance import BinanceConnector
-    from features.technical import TechnicalFeatures
-    from features.smc import SmartMoneyFeatures
-    import numpy as np
+    """Fallback: fetch data from crypto fetcher (Binance→Yahoo) + build features."""
+    from data.crypto_fetcher import build_features_from_crypto
 
-    logger.info("FALLBACK: Fetching {} {} directly from Binance for backtest...",
+    logger.info("FALLBACK: Fetching {} {} from crypto fetcher for backtest...",
                 req.symbol, req.timeframe)
-    bc = BinanceConnector()
-    try:
-        df = await bc.fetch_ohlcv(req.symbol, req.timeframe, limit=req.limit)
-    finally:
-        await bc.close()
+    df = await build_features_from_crypto(
+        symbol=req.symbol,
+        timeframe=req.timeframe,
+        limit=min(req.limit, 1000),
+    )
 
     if df.empty:
-        raise ValueError(f"Binance returned no data for {req.symbol} {req.timeframe}")
+        raise ValueError(f"No data for {req.symbol} {req.timeframe}")
 
-    df = TechnicalFeatures().compute(df)
-    df = SmartMoneyFeatures().compute(df)
-
-    # Add mock derivatives columns
-    df["open_interest"] = 1_000_000_000.0
-    df["funding_rate"] = 0.0001
-    df["long_short_ratio"] = 1.2
-    df["cvd"] = np.cumsum(np.random.randn(len(df)) * 100)
-    df["liq_zone_bias"] = None
-
-    logger.info("FALLBACK: Built {} feature rows from Binance for backtest", len(df))
+    logger.info("FALLBACK: Built {} feature rows for backtest", len(df))
     return df
 
 
